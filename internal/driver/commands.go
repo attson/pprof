@@ -16,6 +16,7 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goccy/go-graphviz"
 	"github.com/google/pprof/internal/plugin"
 	"github.com/google/pprof/internal/report"
 )
@@ -384,10 +386,23 @@ func awayFromTTY(format string) PostProcessor {
 
 func invokeDot(format string) PostProcessor {
 	return func(input io.Reader, output io.Writer, ui plugin.UI) error {
-		cmd := exec.Command("dot", "-T"+format)
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = input, output, os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to execute dot. Is Graphviz installed? Error: %v", err)
+		g, err := graphviz.New(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to create graphviz context: %v", err)
+		}
+
+		data, err := io.ReadAll(input)
+		if err != nil {
+			return err
+		}
+		graphInfo, err := graphviz.ParseBytes(data)
+		if err != nil {
+			return err
+		}
+
+		err = g.Render(context.Background(), graphInfo, graphviz.Format(format), output)
+		if err != nil {
+			return fmt.Errorf("failed render graph: %v", err)
 		}
 		return nil
 	}

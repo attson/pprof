@@ -16,6 +16,7 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goccy/go-graphviz"
 	"github.com/google/pprof/internal/graph"
 	"github.com/google/pprof/internal/measurement"
 	"github.com/google/pprof/internal/plugin"
@@ -346,13 +348,18 @@ func (ui *webInterface) dot(w http.ResponseWriter, req *http.Request) {
 }
 
 func dotToSvg(dot []byte) ([]byte, error) {
-	cmd := exec.Command("dot", "-Tsvg")
-	out := &bytes.Buffer{}
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewBuffer(dot), out, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return nil, err
+	g, err := graphviz.New(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create graphviz context: %v", err)
 	}
 
+	graphInfo, err := graphviz.ParseBytes(dot)
+
+	out := &bytes.Buffer{}
+	err = g.Render(context.Background(), graphInfo, "svg", out)
+	if err != nil {
+		return nil, fmt.Errorf("failed render graph: %v", err)
+	}
 	// Fix dot bug related to unquoted ampersands.
 	svg := bytes.Replace(out.Bytes(), []byte("&;"), []byte("&amp;;"), -1)
 
